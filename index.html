@@ -1,0 +1,1008 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Building Cost Forecast</title>
+<meta name="robots" content="noindex, nofollow">
+<style>
+  :root {
+    --bg:#f6f7f9; --card:#fff; --ink:#1b2430; --muted:#5b6675; --line:#dfe3e8;
+    --accent:#1f6feb; --fill:#2a78d6; --track:#cde2fb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0f141a; --card:#171e27; --ink:#e8edf3; --muted:#9aa6b5; --line:#2a3442;
+            --accent:#5aa2ff; --fill:#3987e5; --track:#0d366b; }
+  }
+  * { box-sizing:border-box; }
+  [hidden] { display:none !important; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+  main { max-width:640px; margin:0 auto; padding:16px 16px calc(170px + env(safe-area-inset-bottom)); }
+  h1 { font-size:1.4rem; margin:8px 0 14px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; }
+  label { display:block; font-size:.82rem; color:var(--muted); margin-bottom:3px; }
+  input[type=number], input[type=text] { width:100%; min-height:44px; padding:8px 10px; font-size:1rem;
+          border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--ink); }
+  :focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  .fine { color:var(--muted); font-size:.8rem; }
+  button { min-height:44px; padding:8px 14px; border-radius:8px; border:1px solid var(--line);
+           background:var(--card); color:var(--ink); font-size:.95rem; cursor:pointer; }
+
+  /* Total + ranked bars */
+  .hero { font-size:2.6rem; font-weight:600; letter-spacing:-.02em; margin:2px 0; line-height:1.15; }
+  .sub { color:var(--muted); margin:0 0 16px; }
+  .rk { margin:0 0 6px; }
+  .rk > .h { display:flex; justify-content:space-between; gap:10px; width:100%; min-height:44px; padding:6px 0 2px;
+             border:0; background:none; text-align:left; font:inherit; color:inherit; align-items:flex-start; }
+  .rk .nm { min-width:0; overflow-wrap:anywhere; }
+  .rk .h b { font-weight:500; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .tr { height:10px; background:var(--track); border-radius:5px; }
+  .fl { height:100%; background:var(--fill); border-radius:5px; }
+  .act { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:8px 0 6px; color:var(--muted); font-size:.85rem; }
+  .act button { min-width:84px; font-size:.85rem; }
+  .btns { display:flex; gap:8px; }
+  .act button.sure { background:#cf222e; border-color:#cf222e; color:#fff; }
+  .empty { text-align:center; padding:18px 8px 10px; }
+  .empty .ic { font-size:2rem; line-height:1; color:var(--muted); }
+  .empty b { display:block; margin:8px 0 4px; font-size:1.05rem; }
+  .addbtn { width:100%; margin-top:12px; border-style:dashed; }
+
+  /* Month scroller: floating bar where an iPhone tab bar sits (rounded card inset from the edges) */
+  .dock { position:fixed; z-index:20; left:12px; right:12px; bottom:max(12px, env(safe-area-inset-bottom));
+          max-width:560px; margin:0 auto; border:1px solid var(--line); border-radius:24px; padding:8px 8px 4px;
+          background:color-mix(in srgb, var(--card) 88%, transparent);
+          -webkit-backdrop-filter:blur(18px) saturate(150%); backdrop-filter:blur(18px) saturate(150%);
+          box-shadow:0 8px 28px rgba(0,0,0,.2); }
+  .dock .top { display:grid; grid-template-columns:44px 1fr 44px; align-items:center; gap:6px; }
+  .dock .top button { width:44px; height:44px; min-height:44px; padding:0; border-radius:50%; font-size:1.3rem; line-height:1; }
+  .dock .top button[aria-disabled=true] { opacity:.35; }
+  .dock .lab { text-align:center; line-height:1.15; }
+  .dock .lab b { font-size:1.15rem; } .dock .lab span { display:block; color:var(--muted); font-size:.78rem; }
+  .ruler-wrap { position:relative; margin-top:2px; }
+  #ruler { display:flex; overflow-x:auto; scroll-snap-type:x mandatory; scrollbar-width:none; height:42px;
+           -webkit-overflow-scrolling:touch; overscroll-behavior-x:contain; touch-action:pan-x; }
+  #ruler::-webkit-scrollbar { display:none; }
+  #ruler .sp { flex:0 0 calc(50% - 8px); }
+  #ruler .tk { flex:0 0 16px; position:relative; scroll-snap-align:center; }
+  #ruler .tk::before { content:""; position:absolute; left:7px; top:8px; width:2px; height:10px; background:var(--line); border-radius:1px; }
+  #ruler .tk.big::before { height:18px; background:var(--muted); top:4px; }
+  #ruler .tk span { position:absolute; top:24px; left:50%; transform:translateX(-50%); font-size:.68rem; color:var(--muted); }
+  .mark { position:absolute; left:50%; top:0; height:26px; width:3px; margin-left:-1.5px; background:var(--accent);
+          border-radius:2px; pointer-events:none; }
+
+  /* Add-expense bottom sheet */
+  .ov { position:fixed; inset:0; z-index:40; background:rgba(0,0,0,.45); display:flex; align-items:flex-end; }
+  .sheet { width:100%; max-width:560px; margin:0 auto; background:var(--card); border-radius:20px 20px 0 0;
+           padding:10px 16px calc(18px + env(safe-area-inset-bottom)); max-height:92svh; overflow:auto; }
+  .sheet .bar { display:flex; justify-content:space-between; align-items:center; }
+  .sheet .bar b { font-size:1.05rem; }
+  .sheet .bar button { border:0; background:none; color:var(--accent); font-weight:500; padding:8px 6px; }
+  .sheet .bar button[aria-disabled=true] { opacity:.4; }
+  .sheet label { margin-top:12px; }
+  .two { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .seg { display:flex; gap:6px; } .seg button { flex:1; }
+  .seg.small button { font-size:.85rem; padding:8px 4px; }
+  .seg button[aria-pressed=true] { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .imp { background:var(--bg); border-radius:10px; padding:10px 12px; margin-top:14px; font-size:.9rem; }
+  .err { color:#cf222e; font-size:.8rem; min-height:1.1em; margin:6px 0 0; }
+  textarea { width:100%; padding:8px 10px; font:inherit; font-size:1rem; border:1px solid var(--line); border-radius:8px;
+             background:var(--bg); color:var(--ink); resize:vertical; }
+  input[type=search] { width:100%; min-height:44px; padding:8px 10px; font-size:1rem; border:1px solid var(--line);
+             border-radius:8px; background:var(--bg); color:var(--ink); margin-top:8px; }
+  .sheet.pick { height:88svh; display:flex; flex-direction:column; overflow:hidden; padding-bottom:0; }
+  .pkscroll { flex:1; overflow:auto; margin:6px -16px 0; padding:0 16px calc(18px + env(safe-area-inset-bottom)); }
+  .grp { border-top:1px solid var(--line); }
+  .grp:first-child { border-top:0; }
+  .ghd { display:flex; justify-content:space-between; align-items:center; gap:10px; width:100%; min-height:52px; padding:8px 0;
+         border:0; border-radius:0; background:none; color:inherit; font:inherit; font-weight:600; text-align:left; }
+  .ghd .cnt { color:var(--muted); font-weight:400; font-size:.85rem; }
+  .ghd .cnt::after { content:"▾"; display:inline-block; margin-left:10px; transition:transform .15s; }
+  .ghd[aria-expanded=true] .cnt::after { transform:rotate(180deg); }
+  .gbody { padding:0 0 6px 12px; }
+  .gbody .pkrow:first-child { border-top:0; }
+  .pkrow { display:flex; justify-content:space-between; align-items:center; gap:10px; width:100%; min-height:48px;
+           padding:8px 0; border:0; border-top:1px solid var(--line); border-radius:0; background:none; text-align:left;
+           font:inherit; color:inherit; }
+  .pkrow small { display:block; color:var(--muted); font-size:.78rem; }
+  .pkrow.custom { border:1px dashed var(--muted); border-radius:10px; padding:8px 12px; margin-top:8px; width:100%;
+                  justify-content:center; font-weight:500; }
+  .fld { width:100%; min-height:44px; display:flex; justify-content:space-between; align-items:center; gap:8px;
+         padding:8px 10px; font-size:1rem; text-align:left; border:1px solid var(--line); border-radius:8px;
+         background:var(--bg); color:var(--ink); }
+  .fld:disabled { opacity:.65; cursor:default; }
+  .fld:disabled::after { content:""; }
+  .fld::after { content:"▾"; color:var(--muted); font-size:.8rem; }
+  .ov.mp { z-index:60; }
+  .wheel { position:relative; height:220px; margin:8px 0 6px; }
+  .wl { height:100%; overflow-y:auto; scroll-snap-type:y mandatory; scrollbar-width:none; padding:88px 0;
+        overscroll-behavior:contain; -webkit-overflow-scrolling:touch; }
+  .wl::-webkit-scrollbar { display:none; }
+  .wl .it { height:44px; display:flex; align-items:center; justify-content:center; scroll-snap-align:center;
+            font-size:1.15rem; color:var(--muted); cursor:pointer; }
+  .wl .it.sel { color:var(--ink); font-weight:600; }
+  .band { position:absolute; left:0; right:0; top:88px; height:44px; pointer-events:none;
+          border-top:1px solid var(--line); border-bottom:1px solid var(--line);
+          background:color-mix(in srgb, var(--accent) 8%, transparent); }
+  .hdr { display:flex; justify-content:space-between; align-items:center; gap:10px; margin:8px 0 14px; }
+  .hdr h1 { margin:0; }
+  .info { width:44px; height:44px; min-height:44px; padding:0; border-radius:50%; font-size:1.15rem; font-weight:600; font-family:Georgia,serif; }
+  .irow { display:grid; grid-template-columns:1fr auto; gap:8px; align-items:start; padding:10px 0; border-top:1px solid var(--line); }
+  .irow:first-child { border-top:0; }
+  .irow b { font-weight:600; }
+  .irow .when { display:block; color:var(--muted); font-size:.78rem; }
+  .irow p { margin:4px 0 0; font-size:.85rem; overflow-wrap:anywhere; }
+  .iadd { min-width:64px; font-size:.85rem; }
+  .cite { color:var(--muted); font-size:.75rem; }
+  .srcl { margin:6px 0 0; padding-left:26px; font-size:.82rem; } .srcl li { margin:5px 0; }
+  .scn { display:flex; align-items:center; gap:8px; max-width:100%; min-height:44px; padding:8px 14px; border-radius:999px; margin:0 0 12px; }
+  .scn span.nm { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .scn::after { content:"▾"; color:var(--muted); font-size:.8rem; }
+  .scrow { border-top:1px solid var(--line); }
+  .scrow:first-child { border-top:0; }
+  .scline { display:grid; grid-template-columns:1fr auto; gap:8px; align-items:center; }
+  .scpick { display:block; width:100%; min-height:56px; padding:8px 0; border:0; border-radius:0; background:none; text-align:left; font:inherit; color:inherit; }
+  .scpick .scn1 { font-weight:600; overflow-wrap:anywhere; } .scpick small { display:block; color:var(--muted); font-size:.8rem; }
+  .chk { color:var(--accent); }
+  .scedit { min-width:64px; font-size:.85rem; }
+  .scpanel { padding:0 0 12px; }
+  .scdel.sure { background:#cf222e; border-color:#cf222e; color:#fff; }
+  .cntb { margin-left:8px; font-size:.72rem; color:var(--muted); border:1px solid var(--line); border-radius:999px; padding:1px 8px; white-space:nowrap; vertical-align:middle; }
+  .grpbody { padding:0 0 6px; }
+  .ent { display:grid; grid-template-columns:1fr auto; gap:8px; align-items:center; padding:10px 0; border-top:1px solid var(--line); color:var(--muted); font-size:.85rem; }
+  .ent:first-of-type { border-top:0; }
+  .ent small { display:block; font-size:.78rem; } .ent button { min-width:84px; font-size:.85rem; }
+  .pkc { display:flex; align-items:center; gap:8px; border-top:1px solid var(--line); }
+  .pkc .pkrow { border-top:0; flex:1; }
+  .pkx { min-width:84px; font-size:.8rem; }
+  .pkx.sure { background:#cf222e; border-color:#cf222e; color:#fff; }
+  .nt { margin:4px 0 0; color:var(--ink); font-size:.85rem; white-space:pre-wrap; overflow-wrap:anywhere; }
+  @media (prefers-reduced-motion: no-preference) {
+    .ov { animation:fade .18s ease-out; } .sheet { animation:rise .22s ease-out; }
+    @keyframes fade { from { opacity:0 } } @keyframes rise { from { transform:translateY(24px) } }
+  }
+</style>
+</head>
+<body>
+<main>
+  <div class="hdr"><h1>Building Cost Forecast</h1><button class="info" id="infoBtn" aria-label="Expenses to expect: what clinics like this usually pay for" aria-haspopup="dialog">i</button></div>
+  <button class="scn" id="scnBtn" aria-haspopup="dialog" aria-label="Switch scenario"><span class="nm" id="scnName"></span></button>
+  <section class="card" aria-live="polite">
+    <div class="fine" id="heroLabel"></div>
+    <div class="hero" id="hero"></div>
+    <p class="sub" id="heroSub"></p>
+    <div id="ranked"></div>
+    <button class="addbtn" id="addBtn">+ Add expense</button>
+    <p class="fine">Every amount here is one you entered. Planning estimates only, not financial, tax or legal advice.</p>
+  </section>
+</main>
+
+<!-- Month scroller: scroll right for more months, left for fewer -->
+<nav class="dock" aria-label="Months to forecast">
+  <div class="top">
+    <button id="mPrev" aria-label="One month fewer">‹</button>
+    <div class="lab"><b id="mLabel"></b><span id="mSub"></span></div>
+    <button id="mNext" aria-label="One month more">›</button>
+  </div>
+  <div class="ruler-wrap">
+    <div id="ruler" role="slider" tabindex="0" aria-label="Months to forecast" aria-valuemin="1" aria-valuemax="72"></div>
+    <div class="mark" aria-hidden="true"></div>
+  </div>
+</nav>
+
+<!-- Scenarios -->
+<div class="ov" id="sc" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="scTitle">
+    <div class="bar"><button id="scClose">Close</button><b id="scTitle" tabindex="-1">Scenarios</b><span style="min-width:64px"></span></div>
+    <p class="fine" style="margin:4px 0 6px">Each scenario keeps its own expenses and month setting. They are saved in this browser on this device.</p>
+    <div id="scList"></div>
+    <button class="addbtn" id="scNew">+ New blank scenario</button>
+  </div>
+</div>
+
+<!-- Info: expenses to expect, from the research -->
+<div class="ov" id="inf" hidden>
+  <div class="sheet pick" role="dialog" aria-modal="true" aria-labelledby="infTitle">
+    <div class="bar"><button id="infCancel">Close</button><b id="infTitle" tabindex="-1">Expenses to expect</b><span style="min-width:64px"></span></div>
+    <p class="fine" style="margin:4px 0 0">What clinics like this usually pay for, and when. Month 1 is the month you move in. Tap + Add to put one in your forecast.</p>
+    <div class="pkscroll" id="infList"></div>
+  </div>
+</div>
+
+<!-- Expense picker: the list of known building expenses, plus a custom entry -->
+<div class="ov" id="pk" hidden>
+  <div class="sheet pick" role="dialog" aria-modal="true" aria-labelledby="pkTitle">
+    <div class="bar"><button id="pkCancel">Cancel</button><b id="pkTitle" tabindex="-1">Choose an expense</b><span style="min-width:64px"></span></div>
+    <input id="pkQ" type="search" placeholder="Search expenses" autocomplete="off" aria-label="Search expenses">
+    <button class="pkrow custom" id="pkCustom">+ Custom expense</button>
+    <div class="pkscroll" id="pkList"></div>
+  </div>
+</div>
+
+<!-- Expense form -->
+<div class="ov" id="ov" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="shTitle">
+    <div class="bar"><button id="shCancel">‹ List</button><b id="shTitle">Add expense</b><button id="shDone" aria-disabled="true">Done</button></div>
+    <p class="fine" id="ref" style="margin:2px 0 0"></p>
+    <label for="aName">Name</label><input id="aName" type="text" maxlength="60" placeholder="e.g. Rent" autocomplete="off">
+    <label id="cLab">Category</label>
+    <button type="button" class="fld" id="aCat" aria-haspopup="dialog" aria-labelledby="cLab aCat"></button>
+    <label id="bLab">Charged as</label>
+    <button type="button" class="fld" id="aBasis" aria-haspopup="dialog" aria-labelledby="bLab aBasis"></button>
+    <div class="two">
+      <div><label for="aAmt" id="lAmt">Amount ($)</label><input id="aAmt" type="number" min="0" step="any" inputmode="decimal"></div>
+      <div><label id="lStart">Starts in month</label><button type="button" class="fld" id="aStart" aria-haspopup="dialog" aria-labelledby="lStart aStart"></button></div>
+    </div>
+    <div id="hrBox" hidden><label for="aHrs">Hours per week</label><input id="aHrs" type="number" min="0" step="any" inputmode="decimal" placeholder="e.g. 30"></div>
+    <div id="sfBox" hidden><label for="aSf">Square feet</label><input id="aSf" type="number" min="1" step="1" inputmode="numeric" placeholder="e.g. 1600"></div>
+    <label id="kLab">Repeats</label>
+    <div class="seg" id="kind" role="group" aria-labelledby="kLab">
+      <button data-kind="once" aria-pressed="false">Once</button>
+      <button data-kind="monthly" aria-pressed="true">Monthly</button>
+      <button data-kind="yearly" aria-pressed="false">Yearly</button>
+    </div>
+    <div id="endBox"><label id="lEnd">Ends after month</label>
+      <button type="button" class="fld" id="aEnd" aria-haspopup="dialog" aria-labelledby="lEnd aEnd"></button></div>
+    <label for="aNote">Details (optional)</label>
+    <textarea id="aNote" rows="3" maxlength="300" placeholder="What it covers, the vendor, contract terms..."></textarea>
+    <div class="imp" id="imp" aria-live="polite"></div>
+    <p class="err" id="err" role="alert"></p>
+  </div>
+</div>
+
+<!-- Month wheel: pops up over the form -->
+<div class="ov mp" id="mp" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="mpTitle">
+    <div class="bar"><button id="mpCancel">Cancel</button><b id="mpTitle">Month</b><button id="mpDone">Done</button></div>
+    <div class="wheel">
+      <div class="wl" id="wl" role="slider" tabindex="0" aria-label="Month"></div>
+      <div class="band" aria-hidden="true"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+const KEY = "iopcare.v4";          // every scenario lives in this one saved record
+const OLD_KEY = "iopcare.v3";      // the single-build version; moved once into Scenario A (left untouched as a backup)
+const MAXM = 72, STEP = 16;        // 6 years of months on the scroller, pixels per month tick
+
+const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const blank = name => ({ id:newId(), name, months:12, added:[] });
+function nextName(list) {
+  const used = new Set(list.map(s => s.name));
+  for (let i = 0; i < 26; i++) { const n = "Scenario " + String.fromCharCode(65 + i); if (!used.has(n)) return n; }
+  return "Scenario " + (list.length + 1);
+}
+function cleanScenario(s) {
+  s.months = Math.min(MAXM, Math.max(1, +s.months || 12));
+  if (!Array.isArray(s.added)) s.added = [];
+  if (!s.id) s.id = newId();
+  if (!s.name) s.name = "Scenario";
+  return s;
+}
+function loadStore() {
+  try {
+    const s = JSON.parse(localStorage.getItem(KEY));
+    if (s && Array.isArray(s.scenarios) && s.scenarios.length) {
+      s.scenarios.forEach(cleanScenario);
+      if (!s.scenarios.some(x => x.id === s.currentId)) s.currentId = s.scenarios[0].id;
+      if (!Array.isArray(s.custom)) s.custom = [];
+      return s;
+    }
+  } catch (e) {}
+  try {                                  // one-time move from the single-build version
+    const o = JSON.parse(localStorage.getItem(OLD_KEY));
+    if (o && Array.isArray(o.added)) {
+      const sc = cleanScenario({ name:"Scenario A", months:o.months, added:o.added, sqft:o.sqft });
+      return { currentId:sc.id, scenarios:[sc], custom:[] };
+    }
+  } catch (e) {}
+  const sc = blank("Scenario A");
+  return { currentId:sc.id, scenarios:[sc], custom:[] };
+}
+let store = loadStore();
+const currentScenario = () => store.scenarios.find(s => s.id === store.currentId);
+function save() { try { localStorage.setItem(KEY, JSON.stringify(store)); } catch (e) {} }
+
+let state = currentScenario();     // the scenario you are looking at; edits to it are saved with the store
+let openId = null;                 // which row is expanded (one at a time)
+const $ = id => document.getElementById(id);
+const usd = n => "$" + Math.round(n).toLocaleString("en-US");
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+/* ---------- Model: money per month ---------- */
+function addMonth(a, m) {
+  if (m < a.start || (a.kind !== "once" && a.end && m > a.end)) return 0;
+  if (a.kind === "once") return m === a.start ? a.amt : 0;
+  if (a.kind === "yearly") return (m - a.start) % 12 === 0 ? a.amt : 0;
+  return a.amt;
+}
+const sumTo = (fn, N) => { let s = 0; for (let m = 1; m <= N; m++) s += fn(m); return s; };
+const usd2 = n => "$" + Number(n).toFixed(2);
+/* Turn a per-sq-ft rate into the amount for each time it is charged (once, every month, or every year). */
+function perCadence(rate, sf, basis, kind, hours) {
+  if (basis === "flat") return rate;
+  if (basis === "salary") return kind === "monthly" ? rate / 12 : rate;                       // a yearly salary paid monthly
+  if (basis === "hourly") { const yr = rate * hours * 52; return kind === "monthly" ? yr / 12 : yr; }
+  const base = rate * sf;
+  if (kind === "once") return base;
+  if (kind === "monthly") return basis === "psf_yr" ? base / 12 : base;
+  return basis === "psf_yr" ? base : base * 12;   // yearly
+}
+function schedule(a) {
+  const end = a.end ? ` to month ${a.end}` : "";
+  let s = a.kind === "once" ? `once, month ${a.start}`
+        : `${usd(a.amt)}/${a.kind === "yearly" ? "yr" : "mo"} from month ${a.start}${end}`;
+  if (a.basis === "psf_yr" || a.basis === "psf_mo")
+    s += ` · ${usd2(a.rate)} per sq ft${a.kind === "once" ? "" : a.basis === "psf_yr" ? " per year" : " per month"} × ${Number(a.sqft).toLocaleString("en-US")} sq ft`;
+  if (a.basis === "salary") s += ` · ${usd(a.rate)} a year salary`;
+  if (a.basis === "hourly") s += ` · ${usd2(a.rate)}/hr × ${a.hours} hrs/week`;
+  return s;
+}
+function monthsText(N) {
+  if (N === 6) return "half a year";
+  if (N % 12 === 0) return N === 12 ? "1 year" : `${N/12} years`;
+  if (N % 6 === 0) return `${N/12} years`;
+  return "";
+}
+
+/* ---------- Main screen ---------- */
+/* Expenses for the same thing (same category and name) share one bar; tap it to see each entry. */
+const keyOf = a => (a.cat || a.group || "") + "|" + a.name.trim().toLowerCase();
+function rowKeyFor(a) {
+  const N = state.months, k = keyOf(a);
+  return state.added.filter(x => x.start <= N && keyOf(x) === k).length > 1 ? "g:" + k : a.id;
+}
+function focusRow(key) {
+  const b = Array.from(document.querySelectorAll(".rk button.h")).find(x => (x.dataset.gid !== undefined ? x.dataset.gid : +x.dataset.id) === key);
+  if (b) b.focus();
+}
+function drawTotals() {
+  const N = state.months;
+  // An expense only appears once the months you are viewing reach its start month.
+  const items = state.added.filter(a => a.start <= N).map(a => ({ a, v:sumTo(m => addMonth(a, m), N) }));
+  const hiddenLater = state.added.length - items.length;
+  const map = new Map();
+  items.forEach(it => {
+    const k = keyOf(it.a);
+    if (!map.has(k)) map.set(k, { key:k, name:it.a.name, cat:it.a.cat || it.a.group || "", entries:[], v:0 });
+    const g = map.get(k); g.entries.push(it); g.v += it.v;
+  });
+  const groups = Array.from(map.values()).sort((x, y) => y.v - x.v);
+  groups.forEach(g => g.entries.sort((x, y) => y.v - x.v));
+  const tot = items.reduce((s, i) => s + i.v, 0), max = groups.length ? groups[0].v : 0;
+  $("heroLabel").textContent = `Total cost, months 1–${N}`;
+  $("hero").textContent = usd(tot);
+  $("heroSub").textContent = `${usd(tot / N)} / month average · ${N} ${N === 1 ? "month" : "months"}`;
+  const bar = v => `<div class="tr"><div class="fl" style="width:${v && max ? Math.max(v / max * 100, 1.5) : 0}%"></div></div>`;
+  const btns = a => `<div class="btns"><button class="ed" data-ed="${a.id}">Edit</button><button class="del" data-del="${a.id}">Remove</button></div>`;
+  $("ranked").innerHTML = groups.length ? groups.map(g => {
+    if (g.entries.length === 1) {                                   // one expense: same row as before
+      const { a, v } = g.entries[0], open = openId === a.id;
+      return `<div class="rk"><button class="h" data-id="${a.id}" aria-expanded="${open}">
+          <span class="nm">${esc(a.name)}</span><b>${usd(v)}</b></button>${bar(v)}
+        <div class="act" ${open ? "" : "hidden"}><div><span>${esc(schedule(a))}${(a.cat || a.group) ? " · " + esc(a.cat || a.group) : ""}</span>${a.note ? `<p class="nt">${esc(a.note)}</p>` : ""}</div>${btns(a)}</div></div>`;
+    }
+    const gid = "g:" + g.key, open = openId === gid, n = g.entries.length;
+    return `<div class="rk"><button class="h" data-gid="${esc(gid)}" aria-expanded="${open}">
+        <span class="nm">${esc(g.name)}<span class="cntb" aria-label="${n} entries">×${n}</span></span><b>${usd(g.v)}</b></button>${bar(g.v)}
+      <div class="grpbody" ${open ? "" : "hidden"}><div class="fine" style="padding:6px 0 0">${esc(g.cat || "Expenses")} · ${n} entries, added together above</div>` +
+      g.entries.map(({ a, v }) => `<div class="ent"><div><span>${esc(schedule(a))}</span><small>${usd(v)} in months 1–${N}</small>${a.note ? `<p class="nt">${esc(a.note)}</p>` : ""}</div>${btns(a)}</div>`).join("") + `</div></div>`;
+  }).join("") : (hiddenLater
+    ? `<div class="empty"><div class="ic" aria-hidden="true">◔</div><b>Nothing has started yet</b></div>`
+    : `<div class="empty"><div class="ic" aria-hidden="true">◔</div><b>No expenses yet</b>
+      <span class="fine">Tap Add expense. Each one becomes a bar here, ranked largest first.</span></div>`);
+}
+
+/* ---------- Month scroller (bottom bar) ---------- */
+const ruler = $("ruler");
+let rulerReady = false;
+const reduceMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+function buildRuler() {
+  let h = `<div class="sp"></div>`;
+  for (let m = 1; m <= MAXM; m++) {
+    const big = m === 1 || m % 6 === 0;
+    h += `<i class="tk${big ? " big" : ""}">${big ? `<span>${m}</span>` : ""}</i>`;
+  }
+  ruler.innerHTML = h + `<div class="sp"></div>`;
+}
+function drawMonths() {
+  const N = state.months, t = monthsText(N);
+  $("mLabel").textContent = `${N} ${N === 1 ? "month" : "months"}`;
+  $("mSub").textContent = `months 1–${N}${t ? " · " + t : ""}`;
+  ruler.setAttribute("aria-valuenow", N);
+  ruler.setAttribute("aria-valuetext", `${N} ${N === 1 ? "month" : "months"}`);
+  $("mPrev").setAttribute("aria-disabled", N <= 1);
+  $("mNext").setAttribute("aria-disabled", N >= MAXM);
+}
+function setMonths(m, smooth) {
+  m = Math.min(MAXM, Math.max(1, Math.round(m)));
+  ruler.scrollTo({ left:(m - 1) * STEP, behavior:(smooth && !reduceMotion()) ? "smooth" : "auto" });
+  if (m !== state.months) { state.months = m; save(); drawMonths(); drawTotals(); }
+}
+ruler.addEventListener("scroll", () => {   // right = more months, left = fewer
+  if (!rulerReady) return;
+  const m = Math.min(MAXM, Math.max(1, Math.round(ruler.scrollLeft / STEP) + 1));
+  if (m !== state.months) { state.months = m; save(); drawMonths(); drawTotals(); }
+}, { passive:true });
+ruler.addEventListener("keydown", e => {
+  const k = { ArrowRight:1, ArrowUp:1, ArrowLeft:-1, ArrowDown:-1, PageUp:6, PageDown:-6 }[e.key];
+  if (k) { e.preventDefault(); setMonths(state.months + k, true); }
+  else if (e.key === "Home") { e.preventDefault(); setMonths(1, true); }
+  else if (e.key === "End")  { e.preventDefault(); setMonths(MAXM, true); }
+});
+$("mPrev").addEventListener("click", () => setMonths(state.months - 1, true));
+$("mNext").addEventListener("click", () => setMonths(state.months + 1, true));
+
+/* ---------- Rows: tap to open, remove in two taps ---------- */
+$("ranked").addEventListener("click", e => {
+  const ed = e.target.closest("button.ed");
+  if (ed) { openEdit(+ed.dataset.ed); return; }
+  const d = e.target.closest("button.del");
+  if (d) {
+    if (d.classList.contains("sure")) {
+      state.added = state.added.filter(a => String(a.id) !== d.dataset.del); openId = null; save(); drawTotals();
+    } else {
+      d.classList.add("sure"); d.textContent = "Remove?";
+      setTimeout(() => { if (d.isConnected) { d.classList.remove("sure"); d.textContent = "Remove"; } }, 3000);
+    }
+    return;
+  }
+  const h = e.target.closest("button.h");
+  if (h) { const id = h.dataset.gid !== undefined ? h.dataset.gid : +h.dataset.id; openId = openId === id ? null : id; drawTotals(); }
+});
+
+/* ---------- Expense catalog (names follow standard building-budget groups plus the researched items; kind = my suggested schedule) ---------- */
+/* hint: a sourced reference where I have one, otherwise a plain description. No amounts are filled in for you. */
+const CATALOG = [
+  ["Lease & occupancy", [
+    ["Base rent", "monthly", "Asking rents seen on LoopNet: about $18-$27 per sq ft per year", 1],
+    ["First month's rent", "once", "Expect first month's rent, and sometimes last month's, plus the deposit (CPA firm)"],
+    ["Last month's rent (if required)", "once", "Check the lease"],
+    ["Security deposit", "once", "Often 2-4 months' rent for strong tenants (broker and law blogs; summaries only)"],
+    ["Operating charges (CAM, triple-net)", "monthly", "Extra charges on triple-net leases for common areas, tax and insurance", 1],
+    ["Annual CAM true-up (year-end bill)", "yearly", "Arrives about 90-120 days after year-end; you may have 30-90 days to dispute (LeaseCake)"],
+    ["Parking", "monthly", "BOMA 2016 office: about $0.61 per sq ft per year"]]],
+  ["Utilities", [
+    ["Electricity", "monthly", "EIA 2018: all energy for outpatient health care about $2.09 per sq ft per year"],
+    ["Natural gas", "monthly", "Part of the energy figure above"],
+    ["Water & sewer", "monthly", "Not researched yet"],
+    ["Trash & recycling", "monthly", ""],
+    ["Internet", "monthly", ""],
+    ["Phone / VoIP", "monthly", ""]]],
+  ["Repairs & maintenance", [
+    ["General repairs & upkeep", "monthly", "BOMA 2016 office: about $2.00 per sq ft per year", 1],
+    ["HVAC service", "yearly", "Tune-ups and filter changes"],
+    ["Plumbing & electrical repairs", "monthly", ""],
+    ["Pest control", "monthly", ""],
+    ["Elevator service", "monthly", "Only if the building has one"],
+    ["Roof & exterior repairs", "once", ""],
+    ["Painting & flooring", "once", ""],
+    ["Window cleaning", "yearly", ""]]],
+  ["Cleaning & supplies", [
+    ["Janitorial service", "monthly", "BOMA 2016 office: about $1.52 per sq ft per year", 1],
+    ["Cleaning supplies", "monthly", ""],
+    ["Restroom & paper supplies", "monthly", ""],
+    ["Carpet & deep cleaning", "yearly", ""],
+    ["Urine drug-test supplies", "monthly", "In-house cups about $3-$10 each; lab screens vary widely (price pages; summaries only)"],
+    ["Naloxone & overdose-response supplies", "yearly", "DHCS lets certified outpatient programs keep naloxone on site; permitted, not required (summary only)"],
+    ["Sharps / medical waste pickup", "monthly", "Only if your program needs it"]]],
+  ["Grounds & parking", [
+    ["Landscaping", "monthly", "BOMA 2016 roads and grounds: about $0.25 per sq ft per year", 1],
+    ["Parking lot upkeep", "yearly", ""],
+    ["Exterior lighting", "monthly", ""],
+    ["Signage", "once", ""]]],
+  ["Security & safety", [
+    ["Alarm monitoring", "monthly", "BOMA 2016 security: about $0.72 per sq ft per year"],
+    ["Cameras & access control", "once", ""],
+    ["Security guard", "monthly", ""],
+    ["Fire extinguisher & sprinkler inspections", "yearly", ""],
+    ["First-aid & emergency supplies", "yearly", ""]]],
+  ["Insurance & taxes", [
+    ["Property tax", "yearly", "BOMA 2016 office: tax and insurance together about $4.40 per sq ft per year (my derivation)"],
+    ["Building / property insurance", "yearly", ""],
+    ["General liability insurance", "yearly", "Median about $352 a year for therapists and counselors (Insureon)"],
+    ["Professional liability (malpractice)", "yearly", "Median about $670 a year for therapists (Insureon); a psychiatric-clinic vendor says $5,000-$15,000 per psychiatric provider"],
+    ["Workers' compensation", "yearly", "Median about $614 a year for therapists and counselors (Insureon)"],
+    ["Cyber insurance", "yearly", "Median about $686 a year (Insureon)"],
+    ["Employment practices liability", "yearly", "Listed with the first-year insurance costs by a CPA firm"],
+    ["Tail coverage (when a policy ends)", "once", "Often 100%-200% of the last annual premium (summaries only)"]]],
+  ["Licensing, legal & fees", [
+    ["State certification & licensing fees", "yearly", "Mandatory for outpatient programs; running without it risks $2,000 a day in penalties. Fee amounts: not found (DHCS site blocked)"],
+    ["County contracting & credentialing", "once", "You cannot bill until the county credentials each clinician (Orange County)"],
+    ["Accreditation / level-of-care certification", "once", "CARF level-of-care certification: base $4,540, $3,520 if already CARF-accredited, $500 per extra level"],
+    ["Business license & permits", "yearly", "Garden Grove requires a Planning location review first; Santa Ana taxes professional services by headcount (city pages; summaries only)"],
+    ["Zoning / conditional use permit fees", "once", "Confirm zoning in writing before you sign a lease"],
+    ["California LLC annual franchise tax", "yearly", "$800 minimum every year, even with no income (Bay Legal)"],
+    ["LLC formation & Statement of Information", "once", "$70 filing plus a $20 Statement of Information within 90 days (Bay Legal)"],
+    ["Legal & setup", "once", "Entity formation and healthcare attorney review: $1,500-$5,000+ (vendor)"],
+    ["Background checks (Live Scan)", "once", "$49 state and federal plus an operator fee of about $20-$50 per person (summaries only)"],
+    ["Therapist license renewal (every 2 years)", "once", "LMFT: $200, $100 from July 2026 through June 2030, plus a $20 education fee (BBS)"],
+    ["HIPAA risk assessment & training", "yearly", "About $499-$2,000 a year on a HIPAA platform; all HIPAA spending $1,500-$5,000 (vendor)"],
+    ["Accounting & bookkeeping", "monthly", "Healthcare billing needs more than generic bookkeeping (CPA firm)"],
+    ["Bank & card fees", "monthly", ""]]],
+  ["Equipment, software & office", [
+    ["Office supplies", "monthly", ""],
+    ["Furniture", "once", "Group room for 8-12 people, ADA restrooms, intake space, private rooms (Behave Health)"],
+    ["Computers & phones", "once", ""],
+    ["Printer / copier lease", "monthly", ""],
+    ["Records (EHR) & billing software", "monthly", "Setup takes about 60-90 days (vendor guide)"],
+    ["Billing service (percent of collections)", "monthly", "Typically 4%-8% of collections for behavioral health (vendor)"],
+    ["Payer enrollment / credentialing service", "once", "Free if done yourself; outside services a few hundred dollars (vendor)"],
+    ["Website & marketing", "monthly", "About $500 DIY to $5,000+ hired out (vendor); one owner ran 200% over the first-year marketing budget"],
+    ["Required trainings", "once", "The county requires ASAM training and two evidence-based-practice trainings before you deliver services"]]],
+  ["Build-out & capital", [
+    ["Build-out / tenant improvements", "once", "You may pay up front and be reimbursed later; permits and code work add time and cost (CPA firm)", 1],
+    ["ADA accessibility work", "once", ""],
+    ["Moving costs", "once", ""],
+    ["Working-capital reserve", "once", "3-6 months of overhead before the first collections (CPA firm); SBA says at least a year of monthly expenses"],
+    ["Capital reserve (roof, HVAC)", "monthly", "Lender floors of $0.20-$0.25 per sq ft per year are old and low", 1]]],
+  ["People", [
+    ["Therapist pay", "monthly", ""],
+    ["Admin / front desk pay", "monthly", ""],
+    ["Payroll taxes & benefits", "monthly", "California new-employer unemployment 3.4% on the first $7,000 per employee, plus 0.1% ETT (EDD); all employment costs run 25%-35% above base pay (CPA firm)"],
+    ["Contractors", "monthly", ""],
+    ["Continuing education", "yearly", "LMFT: 36 hours every 2 years, 6 in law and ethics (BBS); county: 5 hours a year in addiction (Orange County)"]]]
+];
+
+/* ---------- Researched list: what usually shows up, and when (month 1 = the month you move in) ---------- */
+/* Each item: [name, when, detail, source numbers, add-spec or null]. add-spec = [kind, start month]. */
+const INFO = [
+  ["At move-in (month 1)", [
+    ["Security deposit", "at signing", "Often 2-4 months' rent for strong tenants, up to 12 for weaker credit. Partial return after 24 months is negotiable.", [23], ["once", 1]],
+    ["First month's rent, sometimes last month's", "at signing", "Expect first month's rent, sometimes last month's, plus the deposit.", [12], ["once", 1]],
+    ["Build-out / tenant improvements", "before opening", "You may pay up front and be reimbursed later. Permits, code requirements and HVAC changes add cost and time. One vendor model assumes about $150,000 for a full clinic build-out with no source; your small office should be far less.", [12, 13], ["once", 1]],
+    ["Furniture, computers, phones", "before opening", "Plan a group room for 8-12 people, ADA restrooms, intake space and private rooms.", [15], ["once", 1]],
+    ["Insurance policies start", "before opening", "Median yearly premiums for therapists: malpractice $670, general liability $352, workers' comp $614, cyber $686. A psychiatric-clinic vendor says $5,000-$15,000 per psychiatric provider, a different risk class.", [20, 13], ["yearly", 1]],
+    ["Legal: entity formation and lease review", "before signing", "$1,500-$5,000+ for entity formation and a healthcare attorney (vendor).", [14, 12], ["once", 1]],
+    ["California LLC costs", "months 1-4", "$70 filing, a $20 Statement of Information within 90 days, and an $800 minimum franchise tax every year. The first-year waiver ended for LLCs formed after 2023.", [11], ["yearly", 1]],
+    ["Business license and city business tax", "before opening", "Garden Grove requires a Planning location review before a business license. Santa Ana taxes professional services by number of people. Anaheim: not clear.", [23], ["yearly", 1]]]],
+  ["Months 1-6: before the first payment", [
+    ["Rent, payroll and utilities with no income", "months 1-6+", "3-6 months of overhead before the first collections. Programs often take 12-18 months to reach positive cash flow.", [12, 16], ["once", 1]],
+    ["County credentialing: you can't bill yet", "about 90-180 days", "Staff may not provide any county-billed service until the county credentials them. Costs keep running meanwhile.", [1, 15], null],
+    ["State certification (DHCS)", "before opening", "Mandatory for outpatient substance-use programs. Operating without it can mean civil penalties of $2,000 a day. Fee amounts: not found (DHCS site blocked).", [5], ["yearly", 1]],
+    ["Records (EHR) set-up", "about 60-90 days", "Starts once you have a lease and staff.", [15], ["monthly", 1]],
+    ["Required trainings", "before billing", "ASAM A and B plus two evidence-based-practice trainings before delivering services. Licensed staff need 5 hours a year in addiction.", [1], ["once", 1]],
+    ["Background checks (Live Scan)", "each hire", "$49 state and federal plus an operator fee of about $20-$50 per person.", [23], ["once", 1]],
+    ["HIPAA security risk assessment", "first months, then yearly", "About $499-$2,000 a year on a HIPAA platform; all HIPAA spending $1,500-$5,000 a year.", [19], ["yearly", 2]],
+    ["Payroll set-up and employer taxes", "first hire", "California new-employer unemployment 3.4% on the first $7,000 per employee, plus 0.1% ETT. Total employment costs run 25%-35% above base pay.", [4, 12], ["monthly", 1]],
+    ["Website, branding and marketing", "around opening", "About $500 DIY to $5,000+ hired out. One practice owner ran 200% over the first-year marketing budget (not behavioral health).", [14, 21], ["monthly", 1]]]],
+  ["Months 4-12: once you're open", [
+    ["Billing service starts with your first claims", "when claims start", "Typically 4%-8% of collections for behavioral health. Check setup fees, monthly minimums and per-statement fees. An in-house biller costs $90,000-$120,000 a year all-in (vendor).", [17, 18], ["monthly", 6]],
+    ["Drug-testing supplies", "as clients start", "In-house cups about $3-$10 each. Lab screens range from about $5-$8 on one state contract to $50-$110 retail.", [23], ["monthly", 6]],
+    ["Naloxone and overdose-response supplies", "before clients", "DHCS lets certified outpatient programs keep naloxone on site. Permitted, not required.", [23], ["yearly", 3]],
+    ["Hiring and staffing overruns", "months 4-12", "One owner's labor ran about 30% over budget and only 2 of 5 hires stayed (a surgical practice, not behavioral health).", [21], null],
+    ["Equipment replaced earlier than planned", "any time", "A CPA firm says to hold a cash cushion for this and for delayed insurance payments.", [12], ["once", 9]],
+    ["Insurance renewals", "month 12", "Policies renew yearly. Premiums move with your specialty, headcount and claims history.", [20], null]]],
+  ["Months 13-24: after the first year", [
+    ["Rent steps up", "lease anniversary", "Fixed increases of 2%-3% a year are typical; some leases use CPI with a 3% cap, or the greater of CPI and a fixed minimum.", [23], null],
+    ["CAM year-end true-up", "about months 15-16", "Your monthly CAM payments are estimates. The landlord totals actual costs after year-end, usually 90-120 days later, and you owe any difference, possibly as a lump sum. Disputes may be due within 30-90 days.", [9, 8], ["yearly", 16]],
+    ["Property tax and insurance pass-throughs", "after a sale or reassessment", "On triple-net leases the full increase can pass to you. Ask for 3 years of CAM history and a cap on controllable increases.", [10], null],
+    ["Capital items landing in CAM", "the year work is done", "A new roof or chiller can be billed through CAM unless the lease excludes capital items. Reserves for roof replacement may not be allowed under your lease.", [10, 9], null],
+    ["LLC franchise tax again", "every year", "$800 minimum, even with no income.", [11], null]]],
+  ["Every year or two", [
+    ["Therapist license renewal", "every 2 years", "LMFT: $200, reduced to $100 from July 1, 2026 through June 30, 2030, plus a $20 education fee that is not reduced.", [2], ["once", 24]],
+    ["Continuing education", "every 2 years", "36 hours per 2-year cycle, 6 of them in law and ethics. Orange County also wants 5 hours a year in addiction for licensed staff.", [3, 1], ["yearly", 12]],
+    ["Accreditation or level-of-care certification", "optional or by contract", "CARF level-of-care certification: base fee $4,540 ($3,520 if already CARF-accredited), $500 per extra level of care. A vendor says some payer contracts want accreditation within 12-24 months. Whether Orange County requires it: not confirmed.", [6, 15], ["once", 12]],
+    ["State certification renewal", "yearly or per DHCS", "Renewal terms and fees: not found.", [5], null],
+    ["California Statement of Information", "every 2 years", "$20.", [11], ["once", 24]]]],
+  ["Costs to watch (not line items)", [
+    ["Running without DHCS certification", "any time", "Civil penalties of $2,000 per day for programs that are required to be certified.", [5], null],
+    ["Signing a lease before zoning is confirmed", "before signing", "A vendor cites $50,000-$200,000 in lost deposits when operators sign first. Garden Grove limited these programs to industrial zones in 2025.", [15], null],
+    ["Claim denials and slow payment", "ongoing", "Days awaiting payment: 30-40 is the target; behavioral health is reported at 52-75 days, and Medicaid plans can run slower.", [22], null],
+    ["Holdover rent", "if you stay past the lease", "Often 150%-200% of the last month's rent.", [23], null]]]
+];
+const SOURCES = [
+  [1, "Orange County Health Care Agency: DMC-ODS new provider deck and BHP Provider Manual", "county"],
+  [2, "CA Board of Behavioral Sciences: fee-reduction FAQ, effective July 1, 2026", "official"],
+  [3, "CA Board of Behavioral Sciences: continuing education brochure", "official"],
+  [4, "CA Employment Development Department: employer payroll tax rates", "official"],
+  [5, "Fresno County Behavioral Health bulletin CB-040 on DHCS certification (AB 118, BHIN 25-003)", "county"],
+  [6, "CARF: level-of-care certification fee schedule", "accreditor"],
+  [7, "SBA: calculate your startup costs", "official"],
+  [8, "ICSC: CAM demystified for small businesses", "industry group"],
+  [9, "LeaseCake: CAM guide for tenants", "vendor"],
+  [10, "OfficeFinder: hidden costs tenants miss in office leases", "broker blog"],
+  [11, "Bay Legal: California LLC annual requirements", "law firm blog"],
+  [12, "JMCO (CPA firm): hidden costs of a medical practice startup", "CPA firm"],
+  [13, "OmniMD: cost to open a psychiatric clinic", "vendor"],
+  [14, "Tellescope: costs to start a mental health business", "vendor"],
+  [15, "Behave Health: guides to opening a drug rehab or IOP in California", "vendor"],
+  [16, "SimiTree: starting a behavioral health business", "vendor"],
+  [17, "Advanced Data Systems: in-house vs outsourced behavioral health billing", "vendor"],
+  [18, "Carepatron: what medical billing services cost", "vendor"],
+  [19, "Medcurity: HIPAA security risk assessment cost", "vendor"],
+  [20, "Insureon: insurance costs for therapists and counselors", "broker"],
+  [21, "White Coat Investor: one owner's first-year review (cosmetic surgery, not behavioral health)", "one owner's account"],
+  [22, "iCanotes: behavioral health billing benchmarks", "vendor"],
+  [23, "Search-result summaries only, pages not opened: Live Scan fees; lease escalations, deposits and holdover rent; urine-test prices; DHCS naloxone notice; city business-tax pages", "summary only"],
+  [24, "Could not open: DHCS website (blocked), California Franchise Tax Board, Joint Commission, LoopNet. State certification fees are unknown.", "not read"]
+];
+
+let infOpenG = null;
+function renderInfo() {
+  const cite = ids => ids.length ? ` <span class="cite">[${ids.join(", ")}]</span>` : "";
+  $("infList").innerHTML = INFO.map(([title, items], gi) => {
+    const isOpen = infOpenG === gi;
+    return `<div class="grp"><button class="ghd" data-g="${gi}" aria-expanded="${isOpen}"><span>${esc(title)}</span><span class="cnt">${items.length}</span></button>
+      <div class="gbody" ${isOpen ? "" : "hidden"}>` + items.map(([n, when, d, src, add], ii) =>
+      `<div class="irow"><div><b>${esc(n)}</b><span class="when">${esc(when)}</span><p>${esc(d)}${cite(src)}</p></div>
+        ${add ? `<button class="iadd" data-g="${gi}" data-i="${ii}" aria-label="Add ${esc(n)}">+ Add</button>` : ""}</div>`).join("") + `</div></div>`;
+  }).join("") + `<div class="grp"><button class="ghd" data-g="src" aria-expanded="${infOpenG === "src"}"><span>Sources and limits</span><span class="cnt">${SOURCES.length}</span></button>
+    <div class="gbody" ${infOpenG === "src" ? "" : "hidden"}><p class="fine">Numbers in [brackets] point to this list. Most dollar figures come from vendors or brokers who sell related products, not from audited clinic data, so treat them as starting points. Official sources: 1-5, 7. Nothing is added to your forecast until you tap + Add and enter your own amount.</p>
+    <ol class="srcl">` + SOURCES.map(([n, t, k]) => `<li value="${n}">${esc(t)} <span class="cite">(${esc(k)})</span></li>`).join("") + `</ol></div></div>`;
+}
+function openInfo() { lastOpener = $("infoBtn"); infOpenG = null; renderInfo(); open("inf"); $("infList").scrollTop = 0; $("infTitle").focus(); }
+$("infoBtn").addEventListener("click", openInfo);
+$("infCancel").addEventListener("click", closeAll);
+$("inf").addEventListener("click", e => { if (e.target === $("inf")) closeAll(); });
+$("infList").addEventListener("click", e => {
+  const gh = e.target.closest(".ghd");
+  if (gh) {
+    const key = gh.dataset.g === "src" ? "src" : +gh.dataset.g, willOpen = gh.getAttribute("aria-expanded") !== "true";
+    infOpenG = willOpen ? key : null;
+    document.querySelectorAll("#infList .ghd").forEach(x => {
+      const k = x.dataset.g === "src" ? "src" : +x.dataset.g, on = k === infOpenG;
+      x.setAttribute("aria-expanded", on); x.nextElementSibling.hidden = !on;
+    });
+    if (willOpen) gh.scrollIntoView({ block:"start", behavior:matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+    return;
+  }
+  const a = e.target.closest(".iadd"); if (!a) return;
+  const [n, when, d, src, add] = INFO[+a.dataset.g][1][+a.dataset.i];
+  $("inf").hidden = true;
+  openForm({ name:n, kind:add[0], start:add[1], cat:INFO_CAT[n] || catOf(n) || "Other", refLabel:"From the research", hint:d, from:"inf" });
+});
+
+/* ---------- Categories, and how each one can be charged ---------- */
+const CATEGORIES = CATALOG.map(c => c[0]).concat(["Other"]);
+const BASES = {
+  flat:   { t:"Flat $",                        label:"Amount ($)" },
+  psf_yr: { t:"$ per sq ft per year",          label:"Rate ($ per sq ft per year)" },
+  psf_mo: { t:"$ per sq ft per month",         label:"Rate ($ per sq ft per month)" },
+  salary: { t:"Salary per year",               label:"Salary ($ per year)" },
+  hourly: { t:"Hourly rate × hours per week",  label:"Hourly rate ($ per hour)" }
+};
+const SQFT_CATS = ["Lease & occupancy", "Utilities", "Repairs & maintenance", "Cleaning & supplies", "Grounds & parking", "Security & safety"];
+/* Only offer pricing that makes sense for the category: you never price a therapist per square foot. */
+function allowedBases(cat, kind) {
+  let list = ["flat"];
+  if (SQFT_CATS.includes(cat)) list = ["flat", "psf_yr", "psf_mo"];
+  else if (cat === "Build-out & capital") list = ["flat", "psf_yr"];
+  else if (cat === "People") list = ["flat", "salary", "hourly"];
+  if (kind === "once") list = list.filter(b => b === "flat" || b === "psf_yr");   // no per-month, salary or hourly for a one-time charge
+  return list;
+}
+const baseText = (b, kind) => b === "psf_yr" && kind === "once" ? "$ per sq ft" : BASES[b].t;
+const catOf = name => { for (const [g, items] of CATALOG) if (items.some(i => i[0] === name)) return g; return null; };
+/* Which category each researched item belongs to (used by + Add in the info panel). */
+const INFO_CAT = {
+  "Security deposit":"Lease & occupancy", "First month's rent, sometimes last month's":"Lease & occupancy",
+  "Build-out / tenant improvements":"Build-out & capital", "Furniture, computers, phones":"Equipment, software & office",
+  "Insurance policies start":"Insurance & taxes", "Legal: entity formation and lease review":"Licensing, legal & fees",
+  "California LLC costs":"Licensing, legal & fees", "Business license and city business tax":"Licensing, legal & fees",
+  "Rent, payroll and utilities with no income":"Build-out & capital", "State certification (DHCS)":"Licensing, legal & fees",
+  "Records (EHR) set-up":"Equipment, software & office", "Required trainings":"Equipment, software & office",
+  "Background checks (Live Scan)":"Licensing, legal & fees", "HIPAA security risk assessment":"Licensing, legal & fees",
+  "Payroll set-up and employer taxes":"People", "Website, branding and marketing":"Equipment, software & office",
+  "Billing service starts with your first claims":"Equipment, software & office", "Drug-testing supplies":"Cleaning & supplies",
+  "Naloxone and overdose-response supplies":"Cleaning & supplies", "Equipment replaced earlier than planned":"Equipment, software & office",
+  "CAM year-end true-up":"Lease & occupancy", "Therapist license renewal":"Licensing, legal & fees", "Continuing education":"People",
+  "Accreditation or level-of-care certification":"Licensing, legal & fees", "California Statement of Information":"Licensing, legal & fees"
+};
+
+/* ---------- Add flow: pick from the list (or custom), then fill in the form ---------- */
+let draftKind = "monthly", preset = null, draftStart = 1, draftEnd = null, lastOpener = null, formFrom = "pk", formTouched = false,
+    draftBasis = "flat", draftCat = "Other", editingId = null;
+const open = id => { $(id).hidden = false; document.body.style.overflow = "hidden"; };
+const anyOpen = () => !$("pk").hidden || !$("ov").hidden || !$("mp").hidden || !$("inf").hidden || !$("sc").hidden;
+function closeAll() {
+  $("pk").hidden = true; $("ov").hidden = true; $("mp").hidden = true; $("inf").hidden = true; $("sc").hidden = true; document.body.style.overflow = "";
+  editingId = null;
+  (lastOpener || $("addBtn")).focus();
+}
+
+/* The list the picker shows: the built-in items plus the custom ones you have added, per category. */
+function pickerGroups() {
+  const custom = store.custom || [];
+  const asItem = c => ({ n:c.name, k:c.kind, h:"Added by you", b:c.basis || "flat", custom:true });
+  const list = CATALOG.map(([g, items]) =>
+    [g, items.map(it => ({ n:it[0], k:it[1], h:it[2], b:it[3] ? "psf_yr" : "flat", custom:false })).concat(custom.filter(c => c.cat === g).map(asItem))]);
+  const other = custom.filter(c => c.cat === "Other");
+  if (other.length) list.push(["Other", other.map(asItem)]);
+  return list;
+}
+function rememberCustom(a) {            // a custom expense joins its category list so you can pick it next time
+  store.custom = store.custom || [];
+  const cat = a.cat || "Other", nm = a.name.trim(), low = nm.toLowerCase();
+  const inCatalog = (CATALOG.find(c => c[0] === cat) || [0, []])[1].some(i => i[0].toLowerCase() === low);
+  if (!inCatalog && !store.custom.some(c => c.cat === cat && c.name.toLowerCase() === low))
+    store.custom.push({ name:nm, cat, kind:a.kind, basis:a.basis || "flat" });
+}
+let pkOpenG = null;   // which category is expanded (one at a time); while searching, every match is expanded
+function renderPicker(q) {
+  q = (q || "").trim().toLowerCase();
+  let html = "", shown = 0;
+  pickerGroups().forEach(([group, items], gi) => {
+    const rows = items.filter(r => !q || (r.n + " " + r.h + " " + group).toLowerCase().includes(q));
+    if (!rows.length) return;
+    shown += rows.length;
+    const isOpen = q ? true : pkOpenG === gi;
+    html += `<div class="grp"><button class="ghd" data-g="${gi}" aria-expanded="${isOpen}"><span>${esc(group)}</span><span class="cnt">${rows.length}</span></button>
+      <div class="gbody" ${isOpen ? "" : "hidden"}>` + rows.map(r => {
+      const main = `<button class="pkrow" data-name="${esc(r.n)}" data-kind="${r.k}" data-basis="${r.b}" data-group="${esc(group)}" data-hint="${esc(r.h)}">
+        <span>${esc(r.n)}${r.h ? `<small>${esc(r.h)}</small>` : ""}</span></button>`;
+      return r.custom ? `<div class="pkc">${main}<button class="pkx" data-cat="${esc(group)}" data-nm="${esc(r.n)}" aria-label="Remove ${esc(r.n)} from the list">Remove</button></div>` : main;
+    }).join("") + `</div></div>`;
+  });
+  if (!shown) html = `<div class="empty"><b>No match</b><span class="fine">Nothing in the list matches “${esc(q)}”.</span>
+    <button class="pkrow custom" data-custom="1" data-name="${esc($("pkQ").value.trim())}" style="margin-top:10px">+ Add “${esc($("pkQ").value.trim())}” as a custom expense</button></div>`;
+  $("pkList").innerHTML = html;
+}
+function openPicker() {
+  lastOpener = $("addBtn"); $("pkQ").value = ""; pkOpenG = null; renderPicker("");
+  open("pk"); $("pkList").scrollTop = 0; $("pkTitle").focus();
+}
+function openForm(p) {
+  preset = p; editingId = null;
+  $("shTitle").textContent = "Add expense"; $("shCancel").textContent = "‹ List";
+  $("aName").value = p.name || ""; $("aAmt").value = ""; $("aNote").value = ""; $("aHrs").value = "";
+  draftKind = p.kind || "monthly";
+  draftCat = p.cat || (CATEGORIES.includes(p.group) ? p.group : null) || catOf(p.name) || "Other";
+  draftBasis = p.basis || "flat";
+  $("aSf").value = state.sqft || "";      // square feet you used last time
+  draftStart = p.start || state.months;     // researched items suggest a start month; otherwise the month you are viewing
+  formFrom = p.from || "pk"; formTouched = false;
+  draftEnd = null;
+  const src = p.refLabel || p.group;
+  $("ref").textContent = src ? `${src}${p.hint ? " · " + p.hint : ""}` : "Custom expense. Pick a category so the pricing options fit.";
+  $("pk").hidden = true; open("ov");
+  drawSheet();
+  (p.name ? $("aAmt") : $("aName")).focus();
+}
+/* Edit a saved expense: same form, filled in with what you saved. */
+function openEdit(id) {
+  const a = state.added.find(x => x.id === id); if (!a) return;
+  preset = { group:a.group || "" }; editingId = id; formFrom = "edit"; formTouched = false;
+  $("shTitle").textContent = "Edit expense"; $("shCancel").textContent = "Cancel";
+  $("aName").value = a.name; $("aNote").value = a.note || "";
+  draftKind = a.kind; draftCat = a.cat || catOf(a.name) || "Other"; draftBasis = a.basis || "flat";
+  $("aAmt").value = draftBasis === "flat" ? a.amt : a.rate;      // what you typed: the amount, or the rate
+  $("aSf").value = a.sqft || state.sqft || ""; $("aHrs").value = a.hours || "";
+  draftStart = a.start; draftEnd = a.end || null;
+  $("ref").textContent = "Changes apply to this expense only.";
+  lastOpener = $("addBtn"); open("ov"); drawSheet(); $("aName").focus();
+}
+function readDraft() {
+  const name = $("aName").value.trim(), rate = +$("aAmt").value, start = draftStart, end = draftEnd;
+  const psf = draftBasis === "psf_yr" || draftBasis === "psf_mo", hourly = draftBasis === "hourly";
+  const sf = Math.round(+$("aSf").value), hrs = +$("aHrs").value;
+  const amt = perCadence(rate, sf, draftBasis, draftKind, hrs);
+  let err = "";
+  if (!name) err = "Give it a name.";
+  else if (!(rate > 0)) err = draftBasis === "flat" ? "Enter an amount above $0." : "Enter a rate above $0.";
+  else if (hourly && !(hrs > 0)) err = "Enter the hours per week.";
+  else if (psf && !(sf > 0)) err = "Enter the square feet.";
+  else if (!(start >= 1 && start <= MAXM)) err = `Start month must be 1 to ${MAXM}.`;
+  else if (draftKind !== "once" && end !== null && (end < start || end > MAXM)) err = `End month must be ${start} to ${MAXM}, or empty.`;
+  return { ok:!err, err, rate, sf, hrs, a:{ id:Date.now(), name, amt, kind:draftKind, start, end:draftKind === "once" ? null : end,
+                              note:$("aNote").value.trim(), cat:draftCat, group:preset && preset.group || "",
+                              basis:draftBasis, rate:draftBasis !== "flat" ? rate : undefined,
+                              sqft:psf ? sf : undefined, hours:hourly ? hrs : undefined } };
+}
+function drawSheet() {
+  const allowed = allowedBases(draftCat, draftKind);
+  if (!allowed.includes(draftBasis)) draftBasis = "flat";      // category or schedule changed: fall back to a valid pricing
+  const d = readDraft(), psf = draftBasis === "psf_yr" || draftBasis === "psf_mo", hourly = draftBasis === "hourly";
+  $("aCat").textContent = draftCat;
+  $("aBasis").textContent = baseText(draftBasis, draftKind);
+  $("aBasis").disabled = allowed.length < 2;                    // nothing to choose from
+  $("endBox").hidden = draftKind === "once";
+  $("sfBox").hidden = !psf; $("hrBox").hidden = !hourly;
+  $("lAmt").textContent = draftBasis === "psf_yr" && draftKind === "once" ? "Rate ($ per sq ft)" : BASES[draftBasis].label;
+  $("aStart").textContent = `Month ${draftStart}`;
+  $("aEnd").textContent = draftEnd ? `Month ${draftEnd}` : "No end";
+  document.querySelectorAll("#kind button").forEach(b => b.setAttribute("aria-pressed", b.dataset.kind === draftKind));
+  $("shDone").setAttribute("aria-disabled", !d.ok);
+  $("err").textContent = formTouched ? d.err : "";   // no red text until you start typing
+  let conv = "";
+  if (d.ok && psf) {
+    const yr = draftBasis === "psf_yr" ? d.rate * d.sf : d.rate * d.sf * 12;
+    conv = draftKind === "once" ? `At ${d.sf.toLocaleString("en-US")} sq ft that is <b>${usd(d.rate * d.sf)}</b> once. `
+         : `At ${d.sf.toLocaleString("en-US")} sq ft that is <b>${usd(yr / 12)}</b> a month (<b>${usd(yr)}</b> a year). `;
+  } else if (d.ok && draftBasis === "salary") conv = `That is <b>${usd(d.rate / 12)}</b> a month. `;
+  else if (d.ok && hourly) { const yr = d.rate * d.hrs * 52; conv = `At ${d.hrs} hours a week that is <b>${usd(yr / 12)}</b> a month (<b>${usd(yr)}</b> a year). `; }
+  $("imp").innerHTML = d.ok
+    ? conv + `Adds <b>${usd(sumTo(m => addMonth(d.a, m), state.months))}</b> in months 1–${state.months} and <b>${usd(sumTo(m => addMonth(d.a, m), MAXM))}</b> by month ${MAXM}.`
+    : "Fill in a name and an amount to see what it adds.";
+}
+$("addBtn").addEventListener("click", openPicker);
+$("pkCancel").addEventListener("click", closeAll);
+$("pk").addEventListener("click", e => { if (e.target === $("pk")) closeAll(); });
+$("pkQ").addEventListener("input", () => renderPicker($("pkQ").value));
+$("pkCustom").addEventListener("click", () => openForm({ name:"", kind:"monthly", custom:true }));
+$("pkList").addEventListener("click", e => {
+  const gh = e.target.closest(".ghd");
+  if (gh) {
+    const gi = +gh.dataset.g, searching = !!$("pkQ").value.trim(), willOpen = gh.getAttribute("aria-expanded") !== "true";
+    if (searching) { gh.setAttribute("aria-expanded", willOpen); gh.nextElementSibling.hidden = !willOpen; }
+    else {
+      pkOpenG = willOpen ? gi : null;
+      document.querySelectorAll("#pkList .ghd").forEach(x => { const on = +x.dataset.g === pkOpenG; x.setAttribute("aria-expanded", on); x.nextElementSibling.hidden = !on; });
+    }
+    if (willOpen) gh.scrollIntoView({ block:"start", behavior:matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+    return;
+  }
+  const x = e.target.closest(".pkx");
+  if (x) {
+    if (!x.classList.contains("sure")) {
+      x.classList.add("sure"); x.textContent = "Remove?";
+      setTimeout(() => { if (x.isConnected) { x.classList.remove("sure"); x.textContent = "Remove"; } }, 3000);
+    } else { store.custom = (store.custom || []).filter(c => !(c.cat === x.dataset.cat && c.name === x.dataset.nm)); save(); renderPicker($("pkQ").value); }
+    return;
+  }
+  const b = e.target.closest(".pkrow"); if (!b) return;
+  if (b.dataset.custom) openForm({ name:b.dataset.name, kind:"monthly", custom:true });
+  else openForm({ name:b.dataset.name, kind:b.dataset.kind, basis:b.dataset.basis, cat:b.dataset.group, group:b.dataset.group, hint:b.dataset.hint });
+});
+$("shCancel").addEventListener("click", () => {   // back to wherever you came from
+  if (formFrom === "edit") { closeAll(); return; }          // editing: just close, nothing changes
+  $("ov").hidden = true;
+  if (formFrom === "inf") { open("inf"); $("infTitle").focus(); } else { open("pk"); $("pkTitle").focus(); }
+});
+$("ov").addEventListener("click", e => { if (e.target === $("ov")) closeAll(); });
+document.addEventListener("keydown", e => {
+  if (e.key !== "Escape") return;
+  if (!$("mp").hidden) closeWheel(); else if (anyOpen()) closeAll();   // wheel closes first, then everything
+});
+$("kind").addEventListener("click", e => { const b = e.target.closest("button"); if (b) { draftKind = b.dataset.kind; drawSheet(); } });
+["aName","aAmt","aNote","aSf","aHrs"].forEach(id => $(id).addEventListener("input", () => { formTouched = true; drawSheet(); }));
+
+/* ---------- One scroll wheel, reused for month, category and "charged as" ---------- */
+const ROW = 44;
+let wheelVals = [], mpIdx = 0, mpOpener = null, wheelDone = null;
+const wl = $("wl");
+function markWheel() {
+  wl.querySelectorAll(".it").forEach((el, i) => el.classList.toggle("sel", i === mpIdx));
+  wl.setAttribute("aria-valuenow", mpIdx);
+  wl.setAttribute("aria-valuetext", wheelVals[mpIdx] ? wheelVals[mpIdx].t : "");
+}
+function showWheel(title, vals, idx, opener, done) {      // vals: [{ t:label, v:value }]
+  wheelVals = vals; mpIdx = Math.max(0, idx); mpOpener = opener; wheelDone = done;
+  $("mpTitle").textContent = title;
+  wl.innerHTML = vals.map((o, i) => `<div class="it" data-i="${i}">${esc(o.t)}</div>`).join("");
+  $("mp").hidden = false;
+  wl.scrollTop = mpIdx * ROW; markWheel(); wl.focus();
+}
+function closeWheel() { $("mp").hidden = true; if (mpOpener) mpOpener.focus(); }
+wl.addEventListener("scroll", () => {
+  const i = Math.min(wheelVals.length - 1, Math.max(0, Math.round(wl.scrollTop / ROW)));
+  if (i !== mpIdx) { mpIdx = i; markWheel(); }
+}, { passive:true });
+wl.addEventListener("click", e => {
+  const it = e.target.closest(".it"); if (!it) return;
+  wl.scrollTo({ top:+it.dataset.i * ROW, behavior:matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+});
+wl.addEventListener("keydown", e => {
+  const k = { ArrowDown:1, ArrowUp:-1, PageDown:6, PageUp:-6 }[e.key];
+  if (k) { e.preventDefault(); wl.scrollTo({ top:Math.min(wheelVals.length - 1, Math.max(0, mpIdx + k)) * ROW }); }
+  else if (e.key === "Home") { e.preventDefault(); wl.scrollTo({ top:0 }); }
+  else if (e.key === "End") { e.preventDefault(); wl.scrollTo({ top:(wheelVals.length - 1) * ROW }); }
+  else if (e.key === "Enter") { e.preventDefault(); $("mpDone").click(); }
+});
+$("mpCancel").addEventListener("click", closeWheel);
+$("mp").addEventListener("click", e => { if (e.target === $("mp")) closeWheel(); });
+$("mpDone").addEventListener("click", () => {
+  const o = wheelVals[mpIdx], fn = wheelDone;
+  closeWheel(); if (fn && o) fn(o.v);
+});
+const monthOptions = which => {
+  const all = Array.from({ length:MAXM }, (_, i) => ({ t:`Month ${i + 1}`, v:i + 1 }));
+  return which === "start" ? all : [{ t:"No end", v:null }].concat(all.filter(o => o.v >= draftStart));
+};
+$("aStart").addEventListener("click", () => {
+  const o = monthOptions("start");
+  showWheel("Starts in month", o, o.findIndex(x => x.v === draftStart), $("aStart"),
+    v => { draftStart = v; if (draftEnd !== null && draftEnd < draftStart) draftEnd = null; drawSheet(); });
+});
+$("aEnd").addEventListener("click", () => {
+  const o = monthOptions("end");
+  showWheel("Ends after month", o, o.findIndex(x => x.v === draftEnd), $("aEnd"), v => { draftEnd = v; drawSheet(); });
+});
+$("aCat").addEventListener("click", () =>
+  showWheel("Category", CATEGORIES.map(c => ({ t:c, v:c })), CATEGORIES.indexOf(draftCat), $("aCat"), v => { draftCat = v; drawSheet(); }));
+$("aBasis").addEventListener("click", () => {
+  const al = allowedBases(draftCat, draftKind);
+  showWheel("Charged as", al.map(b => ({ t:baseText(b, draftKind), v:b })), al.indexOf(draftBasis), $("aBasis"), v => { draftBasis = v; drawSheet(); });
+});
+$("shDone").addEventListener("click", () => {
+  const d = readDraft();
+  if (!d.ok) { $("err").textContent = d.err; return; }
+  if (d.a.sqft) state.sqft = d.a.sqft;     // remember it for the next per-sq-ft expense
+  const rowId = editingId;
+  if (rowId !== null) {                                       // editing: replace in place, keep the same id and position
+    const i = state.added.findIndex(x => x.id === rowId); d.a.id = rowId;
+    if (i >= 0) state.added[i] = d.a; else state.added.push(d.a);
+  } else state.added.push(d.a);
+  if (rowId === null && preset && preset.custom) rememberCustom(d.a);     // custom expenses join their category list
+  save(); closeAll();
+  const key = rowKeyFor(d.a);
+  if (rowId !== null || typeof key === "string") openId = key;               // show the entry you just edited, or the group you just added to
+  drawTotals(); focusRow(key);
+});
+
+/* ---------- Scenarios: separate builds you can switch between ---------- */
+let scEditId = null;               // which scenario row is expanded for rename / duplicate / delete
+const scTotal = sc => sumTo ? sc.added.reduce((s, a) => s + sumTo(m => addMonth(a, m), sc.months), 0) : 0;
+function drawScn() { $("scnName").textContent = state.name; }
+function refreshAll() {            // after switching: redraw everything for the new scenario
+  openId = null; drawScn(); drawMonths(); drawTotals();
+  ruler.scrollTo({ left:(state.months - 1) * STEP, behavior:"auto" });
+}
+function renderScn() {
+  $("scList").innerHTML = store.scenarios.map(sc => {
+    const cur = sc.id === store.currentId, editing = scEditId === sc.id, n = sc.added.length;
+    return `<div class="scrow"><div class="scline">
+        <button class="scpick" data-id="${sc.id}" aria-current="${cur}"><span class="scn1">${esc(sc.name)}${cur ? ' <span class="chk" aria-label="current">✓</span>' : ""}</span>
+          <small>${n} ${n === 1 ? "expense" : "expenses"} · ${usd(scTotal(sc))} over ${sc.months} ${sc.months === 1 ? "month" : "months"}</small></button>
+        <button class="scedit" data-edit="${sc.id}" aria-expanded="${editing}" aria-label="Edit ${esc(sc.name)}">${editing ? "Done" : "Edit"}</button></div>
+      <div class="scpanel" ${editing ? "" : "hidden"}>
+        <label for="rn_${sc.id}">Name</label><input id="rn_${sc.id}" type="text" maxlength="40" value="${esc(sc.name)}" data-rename="${sc.id}" autocomplete="off">
+        <div class="two" style="margin-top:10px"><button data-dup="${sc.id}">Duplicate</button><button class="scdel" data-del="${sc.id}">Delete</button></div>
+      </div></div>`;
+  }).join("");
+}
+function openScn() { lastOpener = $("scnBtn"); scEditId = null; renderScn(); open("sc"); $("scTitle").focus(); }
+function switchTo(id) { store.currentId = id; state = currentScenario(); save(); refreshAll(); }
+function addScenario(sc) { store.scenarios.push(sc); switchTo(sc.id); }
+$("scnBtn").addEventListener("click", openScn);
+$("scClose").addEventListener("click", closeAll);
+$("sc").addEventListener("click", e => { if (e.target === $("sc")) closeAll(); });
+$("scNew").addEventListener("click", () => { addScenario(blank(nextName(store.scenarios))); closeAll(); });
+$("scList").addEventListener("click", e => {
+  const pick = e.target.closest(".scpick");
+  if (pick) { if (pick.dataset.id !== store.currentId) switchTo(pick.dataset.id); closeAll(); return; }
+  const ed = e.target.closest(".scedit");
+  if (ed) { scEditId = scEditId === ed.dataset.edit ? null : ed.dataset.edit; renderScn(); return; }
+  const dup = e.target.closest("[data-dup]");
+  if (dup) {
+    const src = store.scenarios.find(s => s.id === dup.dataset.dup);
+    const copy = JSON.parse(JSON.stringify(src)); copy.id = newId(); copy.name = (src.name + " copy").slice(0, 40);
+    addScenario(copy); closeAll(); return;
+  }
+  const del = e.target.closest(".scdel");
+  if (del) {                                              // two taps
+    if (!del.classList.contains("sure")) {
+      del.classList.add("sure"); del.textContent = "Delete?";
+      setTimeout(() => { if (del.isConnected) { del.classList.remove("sure"); del.textContent = "Delete"; } }, 3000);
+      return;
+    }
+    const id = del.dataset.del, wasCurrent = id === store.currentId;
+    store.scenarios = store.scenarios.filter(s => s.id !== id);
+    if (!store.scenarios.length) store.scenarios.push(blank("Scenario A"));      // deleting the last one leaves a blank one
+    if (wasCurrent) { store.currentId = store.scenarios[0].id; state = currentScenario(); save(); refreshAll(); }
+    else save();
+    scEditId = null; renderScn();
+  }
+});
+$("scList").addEventListener("input", e => {              // rename as you type; no redraw so the field keeps focus
+  const t = e.target; if (!t.dataset.rename) return;
+  const sc = store.scenarios.find(s => s.id === t.dataset.rename); if (!sc) return;
+  sc.name = t.value.trim().slice(0, 40) || "Scenario"; save();
+  if (sc.id === store.currentId) drawScn();
+  const title = t.closest(".scrow").querySelector(".scn1"); if (title) title.firstChild.textContent = sc.name;
+});
+
+/* ---------- Start ---------- */
+buildRuler();
+drawScn();
+drawMonths();
+drawTotals();
+requestAnimationFrame(() => {
+  ruler.scrollLeft = (state.months - 1) * STEP;
+  rulerReady = true;
+});
+</script>
+</body>
+</html>
